@@ -7,7 +7,7 @@ import streamlit as st
 
 from lib.docx_report import report_text_to_docx_bytes
 from lib.ollama import OllamaError, chat_once, chat_stream, list_models
-from lib.prompts import DEFAULT_SYSTEM_PROMPT
+from lib.prompts import DEFAULT_SYSTEM_PROMPT, build_recommendation_user_prompt
 from lib.transcript_parser import (
     build_numbered_transcript_block,
     parse_transcript_docx,
@@ -68,15 +68,21 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "user_prompt_transcript": "TRANSCRIPT (numbered enunciados):",
         "output": "Output",
         "report_plain": "PAALSS report (plain text)",
+        "recommendation_plain": "Recommendations document (plain text)",
         "download_report": "Download report (.docx)",
-        "info_run": "Run an analysis to see the PAALSS report here.",
+        "download_recommendation": "Download recommendations (.docx)",
+        "info_run": "Run an analysis to see the generated outputs here.",
+        "user_prompt_recommendation_intro": "Using the transcript and the completed PAALSS report, write the separate recommendations document.",
+        "generating_report": "Generating PAALSS report...",
+        "generating_recommendation": "Generating recommendations document...",
         "how_it_works": "How it works",
         "how_body": (
             "- Upload a transcript (.docx or .txt).\n"
             "- The app extracts utterances and pre-fills a numbered transcript block.\n"
             "- Edit the transcript block if needed.\n"
             "- Edit the base system prompt in the “Base System Prompt” tab and click “Save new prompt”.\n"
-            "- Pick a model, click “Save model”, then run analysis."
+            "- Pick a model, click “Save model”, then run analysis.\n"
+            "- The app generates the PAALSS report first and then a separate recommendations document."
         ),
     },
     "es": {
@@ -129,15 +135,21 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "user_prompt_transcript": "TRANSCRIPCIÓN (enunciados numerados):",
         "output": "Salida",
         "report_plain": "Informe PAALSS (texto plano)",
+        "recommendation_plain": "Documento de recomendaciones (texto plano)",
         "download_report": "Descargar informe (.docx)",
-        "info_run": "Ejecuta un análisis para ver el informe PAALSS aquí.",
+        "download_recommendation": "Descargar recomendaciones (.docx)",
+        "info_run": "Ejecuta un análisis para ver las salidas generadas aquí.",
+        "user_prompt_recommendation_intro": "Usando la transcripción y el informe PAALSS ya completado, redacta el documento separado de recomendaciones.",
+        "generating_report": "Generando informe PAALSS...",
+        "generating_recommendation": "Generando documento de recomendaciones...",
         "how_it_works": "Cómo funciona",
         "how_body": (
             "- Sube una transcripción (.docx o .txt).\n"
             "- La app extrae enunciados y pre-rellena un bloque numerado.\n"
             "- Edita el bloque si hace falta.\n"
             "- Edita el prompt base en la pestaña “Prompt base del sistema” y haz clic en “Guardar nuevo prompt”.\n"
-            "- Elige un modelo, haz clic en “Guardar modelo” y ejecuta el análisis."
+            "- Elige un modelo, haz clic en “Guardar modelo” y ejecuta el análisis.\n"
+            "- La app genera primero el informe PAALSS y luego un documento separado de recomendaciones."
         ),
     },
 }
@@ -274,6 +286,9 @@ if "transcript_text" not in st.session_state:
 
 if "report_text" not in st.session_state:
     st.session_state.report_text = ""
+
+if "recommendation_text" not in st.session_state:
+    st.session_state.recommendation_text = ""
 
 if "meta" not in st.session_state:
     st.session_state.meta = {}
@@ -474,6 +489,9 @@ with tabs[0]:
             stream = st.toggle(t("stream_output"), value=True)
 
         if run:
+            st.session_state.report_text = ""
+            st.session_state.recommendation_text = ""
+
             if _is_cloud_host(host) and not api_key:
                 st.error(t("err_missing_key"))
             elif not st.session_state.transcript_text.strip():
@@ -482,42 +500,79 @@ with tabs[0]:
                 if models and st.session_state.saved_model not in models:
                     st.error(t("err_saved_model_unavailable"))
                 else:
+                    transcript_text = st.session_state.transcript_text.strip()
                     user_prompt = (
                         f"{t('user_prompt_intro')}\n\n"
                         f"{t('user_prompt_transcript')}\n"
-                        f"{st.session_state.transcript_text.strip()}\n"
+                        f"{transcript_text}\n"
                     )
 
-                    messages = [
+                    report_messages = [
                         {"role": "system", "content": st.session_state.system_prompt},
                         {"role": "user", "content": user_prompt},
                     ]
 
-                    out = st.empty()
-                    acc = ""
+                    report_out = st.empty()
+                    report_acc = ""
 
                     try:
-                        if stream:
-                            for chunk in chat_stream(
-                                host=host,
-                                api_key=api_key,
-                                model=st.session_state.saved_model,
-                                messages=messages,
-                                temperature=DEFAULT_TEMPERATURE,
-                            ):
-                                acc += chunk
-                                out.text(acc)
-                        else:
-                            acc = chat_once(
-                                host=host,
-                                api_key=api_key,
-                                model=st.session_state.saved_model,
-                                messages=messages,
-                                temperature=DEFAULT_TEMPERATURE,
-                            )
-                            out.text(acc)
+                        with st.spinner(t("generating_report")):
+                            if stream:
+                                for chunk in chat_stream(
+                                    host=host,
+                                    api_key=api_key,
+                                    model=st.session_state.saved_model,
+                                    messages=report_messages,
+                                    temperature=DEFAULT_TEMPERATURE,
+                                ):
+                                    report_acc += chunk
+                                    report_out.text(report_acc)
+                            else:
+                                report_acc = chat_once(
+                                    host=host,
+                                    api_key=api_key,
+                                    model=st.session_state.saved_model,
+                                    messages=report_messages,
+                                    temperature=DEFAULT_TEMPERATURE,
+                                )
+                                report_out.text(report_acc)
 
-                        st.session_state.report_text = acc
+                        st.session_state.report_text = report_acc
+
+                        recommendation_prompt = build_recommendation_user_prompt(
+                            transcript_text=transcript_text,
+                            report_text=report_acc,
+                        )
+                        recommendation_messages = [
+                            {"role": "system", "content": st.session_state.system_prompt},
+                            {"role": "user", "content": recommendation_prompt},
+                        ]
+
+                        recommendation_out = st.empty()
+                        recommendation_acc = ""
+
+                        with st.spinner(t("generating_recommendation")):
+                            if stream:
+                                for chunk in chat_stream(
+                                    host=host,
+                                    api_key=api_key,
+                                    model=st.session_state.saved_model,
+                                    messages=recommendation_messages,
+                                    temperature=DEFAULT_TEMPERATURE,
+                                ):
+                                    recommendation_acc += chunk
+                                    recommendation_out.text(recommendation_acc)
+                            else:
+                                recommendation_acc = chat_once(
+                                    host=host,
+                                    api_key=api_key,
+                                    model=st.session_state.saved_model,
+                                    messages=recommendation_messages,
+                                    temperature=DEFAULT_TEMPERATURE,
+                                )
+                                recommendation_out.text(recommendation_acc)
+
+                        st.session_state.recommendation_text = recommendation_acc
 
                     except OllamaError as e:
                         st.error(str(e))
@@ -525,20 +580,36 @@ with tabs[0]:
     with right:
         st.markdown(f"### {t('output')}")
 
-        if st.session_state.report_text.strip():
+        if st.session_state.report_text.strip() or st.session_state.recommendation_text.strip():
             st.text_area(
                 t("report_plain"),
                 value=st.session_state.report_text,
-                height=560,
+                height=280,
             )
 
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            docx_bytes = report_text_to_docx_bytes(st.session_state.report_text)
+            report_docx_bytes = report_text_to_docx_bytes(st.session_state.report_text)
 
             st.download_button(
                 t("download_report"),
-                data=docx_bytes,
+                data=report_docx_bytes,
                 file_name=f"paalss_report_{ts}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True,
+            )
+
+            st.text_area(
+                t("recommendation_plain"),
+                value=st.session_state.recommendation_text,
+                height=280,
+            )
+
+            recommendation_docx_bytes = report_text_to_docx_bytes(st.session_state.recommendation_text)
+
+            st.download_button(
+                t("download_recommendation"),
+                data=recommendation_docx_bytes,
+                file_name=f"paalss_recommendations_{ts}.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 use_container_width=True,
             )

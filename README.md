@@ -1,6 +1,8 @@
 # PAALSS Transcript Analyzer
 
-A Streamlit app for generating PAALSS-style analyses from Spanish aided AAC transcripts using an Ollama model.
+A Streamlit app for generating two sequential outputs from Spanish aided AAC transcripts using an Ollama model:
+1. a PAALSS-style analysis report
+2. a separate recommendations document based on the transcript and the generated report
 
 The app is intended for research and clinical drafting support. Its output is not diagnostic and should be reviewed by a qualified clinician or researcher.
 
@@ -11,7 +13,9 @@ The app is intended for research and clinical drafting support. Its output is no
 - Lets the user edit the exact transcript text that will be analyzed
 - Lets the user edit and save the base system prompt
 - Sends the saved prompt and transcript to a selected Ollama model
-- Streams the generated report and supports `.docx` export
+- Generates the PAALSS report first, then generates a separate recommendations document
+- Displays both outputs in separate text areas
+- Supports `.docx` export for both outputs
 - Supports English and Spanish for the app interface
 
 ## Current UI behavior
@@ -37,7 +41,7 @@ This keeps the deployment safer for non-technical users and prevents the API key
 - The saved prompt is stored in `.paalss_settings.json`
 
 ### Temperature is fixed
-Temperature is fixed internally at `0.2` for stable report formatting and is intentionally hidden from the UI.
+Temperature is fixed internally at `0.2` for stable output formatting and is intentionally hidden from the UI.
 
 ### Transcript editing is direct
 The text shown in the transcript editor is the exact text sent to the model. Users can review and revise it before running analysis.
@@ -48,6 +52,10 @@ The text shown in the transcript editor is the exact text sent to the model. Use
 .
 ├── app.py
 ├── lib/
+│   ├── docx_report.py
+│   ├── ollama.py
+│   ├── prompts.py
+│   └── transcript_parser.py
 ├── samples/
 ├── requirements.txt
 └── .streamlit/
@@ -68,9 +76,7 @@ pip install -r requirements.txt
 
 ### 2. Add your Ollama credentials
 
-Use the included template or edit the local secrets file directly.
-
-File:
+Edit the local secrets file:
 
 ```text
 .streamlit/secrets.toml
@@ -110,7 +116,18 @@ streamlit run app.py
 3. Choose a model and click **Save model**.
 4. Open the **Base System Prompt** tab, edit the prompt if needed, and click **Save new prompt**.
 5. Click **Run analysis**.
-6. Download the generated report as `.docx` if needed.
+6. Review the PAALSS report in the first output box.
+7. Review the recommendations document in the second output box.
+8. Download either output as `.docx` if needed.
+
+## Output workflow
+
+When analysis is run, the app performs two model calls in sequence:
+
+1. It generates the PAALSS report.
+2. It then generates the recommendations document using the same saved system prompt, the transcript, and the completed PAALSS report.
+
+This keeps the recommendations grounded in the actual analysis instead of generating both documents independently.
 
 ## Supported transcript input
 
