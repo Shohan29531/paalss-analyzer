@@ -403,7 +403,6 @@ with st.sidebar:
         st.caption("")
 
     st.caption(f"{t('saved_model')}: `{st.session_state.saved_model}`")
-    st.caption(t("default_temperature_note"))
 
 
 st.markdown(
