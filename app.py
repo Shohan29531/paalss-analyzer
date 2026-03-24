@@ -7,7 +7,7 @@ import streamlit as st
 
 from lib.docx_report import report_text_to_docx_bytes
 from lib.ollama import OllamaError, chat_once, chat_stream, list_models
-from lib.prompts import DEFAULT_SYSTEM_PROMPT, build_recommendation_user_prompt
+from lib.prompts import DEFAULT_SYSTEM_PROMPT
 from lib.transcript_parser import (
     build_numbered_transcript_block,
     parse_transcript_docx,
@@ -36,6 +36,7 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "save_model": "Save model",
         "saved": "Saved",
         "saved_model": "Saved model",
+        "default_temperature_note": "Temperature is fixed internally for consistent output.",
         "tab_analyzer": "Analyzer",
         "tab_prompt": "Base System Prompt",
         "prompt_title": "Base System Prompt",
@@ -68,21 +69,15 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "user_prompt_transcript": "TRANSCRIPT (numbered enunciados):",
         "output": "Output",
         "report_plain": "PAALSS report (plain text)",
-        "recommendation_plain": "Recommendations document (plain text)",
         "download_report": "Download report (.docx)",
-        "download_recommendation": "Download recommendations (.docx)",
-        "info_run": "Run an analysis to see the generated outputs here.",
-        "user_prompt_recommendation_intro": "Using the transcript and the completed PAALSS report, write the separate recommendations document.",
-        "generating_report": "Generating PAALSS report...",
-        "generating_recommendation": "Generating recommendations document...",
+        "info_run": "Run an analysis to see the PAALSS report here.",
         "how_it_works": "How it works",
         "how_body": (
             "- Upload a transcript (.docx or .txt).\n"
             "- The app extracts utterances and pre-fills a numbered transcript block.\n"
             "- Edit the transcript block if needed.\n"
             "- Edit the base system prompt in the “Base System Prompt” tab and click “Save new prompt”.\n"
-            "- Pick a model, click “Save model”, then run analysis.\n"
-            "- The app generates the PAALSS report first and then a separate recommendations document."
+            "- Pick a model, click “Save model”, then run analysis."
         ),
     },
     "es": {
@@ -97,12 +92,13 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "api_key_secret_hint": "Clave local persistente: colócala en .streamlit/secrets.toml. En Streamlit Community Cloud, agrégala en Secrets de la app.",
         "save_api_key": "Guardar clave API",
         "saved_api_key": "Clave API guardada para esta sesión",
-        "model": "Model",
+        "model": "Modelo",
         "refresh_models": "Actualizar lista de modelos",
         "could_not_fetch_models": "No se pudo obtener la lista de modelos de este host.",
         "save_model": "Guardar modelo",
         "saved": "Guardado",
         "saved_model": "Modelo guardado",
+        "default_temperature_note": "La temperatura está fijada internamente para una salida consistente.",
         "tab_analyzer": "Analizador",
         "tab_prompt": "Prompt base del sistema",
         "prompt_title": "Prompt base del sistema",
@@ -135,21 +131,15 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "user_prompt_transcript": "TRANSCRIPCIÓN (enunciados numerados):",
         "output": "Salida",
         "report_plain": "Informe PAALSS (texto plano)",
-        "recommendation_plain": "Documento de recomendaciones (texto plano)",
         "download_report": "Descargar informe (.docx)",
-        "download_recommendation": "Descargar recomendaciones (.docx)",
-        "info_run": "Ejecuta un análisis para ver las salidas generadas aquí.",
-        "user_prompt_recommendation_intro": "Usando la transcripción y el informe PAALSS ya completado, redacta el documento separado de recomendaciones.",
-        "generating_report": "Generando informe PAALSS...",
-        "generating_recommendation": "Generando documento de recomendaciones...",
+        "info_run": "Ejecuta un análisis para ver el informe PAALSS aquí.",
         "how_it_works": "Cómo funciona",
         "how_body": (
             "- Sube una transcripción (.docx o .txt).\n"
             "- La app extrae enunciados y pre-rellena un bloque numerado.\n"
             "- Edita el bloque si hace falta.\n"
             "- Edita el prompt base en la pestaña “Prompt base del sistema” y haz clic en “Guardar nuevo prompt”.\n"
-            "- Elige un modelo, haz clic en “Guardar modelo” y ejecuta el análisis.\n"
-            "- La app genera primero el informe PAALSS y luego un documento separado de recomendaciones."
+            "- Elige un modelo, haz clic en “Guardar modelo” y ejecuta el análisis."
         ),
     },
 }
@@ -159,6 +149,7 @@ DEFAULT_TEMPERATURE = 0.2
 APP_TITLE = "PAALSS Transcript Analyzer"
 PREFERRED_DEFAULT_MODEL = "qwen3.5:cloud"
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), ".paalss_settings.json")
+PROMPT_OVERRIDE_FILE = os.path.join(os.path.dirname(__file__), ".paalss_system_prompt.txt")
 
 
 def t(key: str) -> str:
@@ -221,6 +212,43 @@ def _save_settings_merged(update: Dict[str, Any]) -> None:
     _save_settings(settings)
 
 
+def _load_prompt_override() -> str:
+    try:
+        if os.path.exists(PROMPT_OVERRIDE_FILE):
+            with open(PROMPT_OVERRIDE_FILE, "r", encoding="utf-8") as f:
+                value = f.read()
+            if value and value.strip():
+                return value
+    except Exception:
+        pass
+    return ""
+
+
+def _save_prompt_override(prompt_text: str) -> bool:
+    try:
+        with open(PROMPT_OVERRIDE_FILE, "w", encoding="utf-8") as f:
+            f.write(prompt_text)
+        return True
+    except Exception:
+        return False
+
+
+def _delete_prompt_override() -> bool:
+    try:
+        if os.path.exists(PROMPT_OVERRIDE_FILE):
+            os.remove(PROMPT_OVERRIDE_FILE)
+        return True
+    except Exception:
+        return False
+
+
+def _initial_system_prompt() -> str:
+    override = _load_prompt_override()
+    if override:
+        return override
+    return DEFAULT_SYSTEM_PROMPT
+
+
 @st.cache_data(ttl=120)
 def _get_models_cached(host: str, api_key: str) -> List[str]:
     models = list_models(host, api_key=api_key)
@@ -276,7 +304,7 @@ if "lang_es" not in st.session_state:
     st.session_state.lang_es = st.session_state.lang == "es"
 
 if "system_prompt" not in st.session_state:
-    st.session_state.system_prompt = str(settings_boot.get("system_prompt") or DEFAULT_SYSTEM_PROMPT)
+    st.session_state.system_prompt = _initial_system_prompt()
 
 if "prompt_editor" not in st.session_state:
     st.session_state.prompt_editor = st.session_state.system_prompt
@@ -286,9 +314,6 @@ if "transcript_text" not in st.session_state:
 
 if "report_text" not in st.session_state:
     st.session_state.report_text = ""
-
-if "recommendation_text" not in st.session_state:
-    st.session_state.recommendation_text = ""
 
 if "meta" not in st.session_state:
     st.session_state.meta = {}
@@ -315,6 +340,10 @@ with st.sidebar:
 
     st.divider()
     st.markdown(f"## {t('app_title')}")
+    st.markdown(f"### {t('model')}")
+
+    if st.button(t("refresh_models"), use_container_width=True):
+        st.cache_data.clear()
 
     models: List[str] = []
     models_err = ""
@@ -374,8 +403,7 @@ with st.sidebar:
         st.caption("")
 
     st.caption(f"{t('saved_model')}: `{st.session_state.saved_model}`")
-    if st.button(t("refresh_models"), use_container_width=True):
-        st.cache_data.clear()
+    st.caption(t("default_temperature_note"))
 
 
 st.markdown(
@@ -414,11 +442,16 @@ with tabs[1]:
     pcols = st.columns([0.25, 0.25, 0.25, 0.25])
     with pcols[0]:
         if st.button(t("save_prompt"), type="primary", use_container_width=True):
-            st.session_state.system_prompt = st.session_state.prompt_editor
-            _save_settings_merged({"system_prompt": st.session_state.system_prompt})
-            _notify_success(t("saved_prompt"))
+            candidate_prompt = st.session_state.prompt_editor
+            if _save_prompt_override(candidate_prompt):
+                st.session_state.system_prompt = candidate_prompt
+                _save_settings_merged({"system_prompt": candidate_prompt})
+                _notify_success(t("saved_prompt"))
+            else:
+                st.error("Could not persist the prompt to disk.")
     with pcols[1]:
         if st.button(t("reset_prompt"), use_container_width=True):
+            _delete_prompt_override()
             st.session_state.system_prompt = DEFAULT_SYSTEM_PROMPT
             st.session_state.prompt_editor = DEFAULT_SYSTEM_PROMPT
             _save_settings_merged({"system_prompt": DEFAULT_SYSTEM_PROMPT})
@@ -489,9 +522,6 @@ with tabs[0]:
             stream = st.toggle(t("stream_output"), value=True)
 
         if run:
-            st.session_state.report_text = ""
-            st.session_state.recommendation_text = ""
-
             if _is_cloud_host(host) and not api_key:
                 st.error(t("err_missing_key"))
             elif not st.session_state.transcript_text.strip():
@@ -500,79 +530,42 @@ with tabs[0]:
                 if models and st.session_state.saved_model not in models:
                     st.error(t("err_saved_model_unavailable"))
                 else:
-                    transcript_text = st.session_state.transcript_text.strip()
                     user_prompt = (
                         f"{t('user_prompt_intro')}\n\n"
                         f"{t('user_prompt_transcript')}\n"
-                        f"{transcript_text}\n"
+                        f"{st.session_state.transcript_text.strip()}\n"
                     )
 
-                    report_messages = [
+                    messages = [
                         {"role": "system", "content": st.session_state.system_prompt},
                         {"role": "user", "content": user_prompt},
                     ]
 
-                    report_out = st.empty()
-                    report_acc = ""
+                    out = st.empty()
+                    acc = ""
 
                     try:
-                        with st.spinner(t("generating_report")):
-                            if stream:
-                                for chunk in chat_stream(
-                                    host=host,
-                                    api_key=api_key,
-                                    model=st.session_state.saved_model,
-                                    messages=report_messages,
-                                    temperature=DEFAULT_TEMPERATURE,
-                                ):
-                                    report_acc += chunk
-                                    report_out.text(report_acc)
-                            else:
-                                report_acc = chat_once(
-                                    host=host,
-                                    api_key=api_key,
-                                    model=st.session_state.saved_model,
-                                    messages=report_messages,
-                                    temperature=DEFAULT_TEMPERATURE,
-                                )
-                                report_out.text(report_acc)
+                        if stream:
+                            for chunk in chat_stream(
+                                host=host,
+                                api_key=api_key,
+                                model=st.session_state.saved_model,
+                                messages=messages,
+                                temperature=DEFAULT_TEMPERATURE,
+                            ):
+                                acc += chunk
+                                out.text(acc)
+                        else:
+                            acc = chat_once(
+                                host=host,
+                                api_key=api_key,
+                                model=st.session_state.saved_model,
+                                messages=messages,
+                                temperature=DEFAULT_TEMPERATURE,
+                            )
+                            out.text(acc)
 
-                        st.session_state.report_text = report_acc
-
-                        recommendation_prompt = build_recommendation_user_prompt(
-                            transcript_text=transcript_text,
-                            report_text=report_acc,
-                        )
-                        recommendation_messages = [
-                            {"role": "system", "content": st.session_state.system_prompt},
-                            {"role": "user", "content": recommendation_prompt},
-                        ]
-
-                        recommendation_out = st.empty()
-                        recommendation_acc = ""
-
-                        with st.spinner(t("generating_recommendation")):
-                            if stream:
-                                for chunk in chat_stream(
-                                    host=host,
-                                    api_key=api_key,
-                                    model=st.session_state.saved_model,
-                                    messages=recommendation_messages,
-                                    temperature=DEFAULT_TEMPERATURE,
-                                ):
-                                    recommendation_acc += chunk
-                                    recommendation_out.text(recommendation_acc)
-                            else:
-                                recommendation_acc = chat_once(
-                                    host=host,
-                                    api_key=api_key,
-                                    model=st.session_state.saved_model,
-                                    messages=recommendation_messages,
-                                    temperature=DEFAULT_TEMPERATURE,
-                                )
-                                recommendation_out.text(recommendation_acc)
-
-                        st.session_state.recommendation_text = recommendation_acc
+                        st.session_state.report_text = acc
 
                     except OllamaError as e:
                         st.error(str(e))
@@ -580,36 +573,20 @@ with tabs[0]:
     with right:
         st.markdown(f"### {t('output')}")
 
-        if st.session_state.report_text.strip() or st.session_state.recommendation_text.strip():
+        if st.session_state.report_text.strip():
             st.text_area(
                 t("report_plain"),
                 value=st.session_state.report_text,
-                height=280,
+                height=560,
             )
 
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            report_docx_bytes = report_text_to_docx_bytes(st.session_state.report_text)
+            docx_bytes = report_text_to_docx_bytes(st.session_state.report_text)
 
             st.download_button(
                 t("download_report"),
-                data=report_docx_bytes,
+                data=docx_bytes,
                 file_name=f"paalss_report_{ts}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                use_container_width=True,
-            )
-
-            st.text_area(
-                t("recommendation_plain"),
-                value=st.session_state.recommendation_text,
-                height=280,
-            )
-
-            recommendation_docx_bytes = report_text_to_docx_bytes(st.session_state.recommendation_text)
-
-            st.download_button(
-                t("download_recommendation"),
-                data=recommendation_docx_bytes,
-                file_name=f"paalss_recommendations_{ts}.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 use_container_width=True,
             )
