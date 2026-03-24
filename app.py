@@ -340,10 +340,7 @@ with st.sidebar:
 
     st.divider()
     st.markdown(f"## {t('app_title')}")
-    st.markdown(f"### {t('model')}")
-
-    if st.button(t("refresh_models"), use_container_width=True):
-        st.cache_data.clear()
+    # st.markdown(f"### {t('model')}")
 
     models: List[str] = []
     models_err = ""
@@ -403,6 +400,9 @@ with st.sidebar:
         st.caption("")
 
     st.caption(f"{t('saved_model')}: `{st.session_state.saved_model}`")
+
+    if st.button(t("refresh_models"), use_container_width=True):
+        st.cache_data.clear()
 
 
 st.markdown(
