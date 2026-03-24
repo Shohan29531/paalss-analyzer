@@ -234,60 +234,97 @@ Additional analysis rules:
 
 DELIVERABLE B: RECOMMENDATIONS DOCUMENT
 
-When the user asks for the recommendations document, write a separate plain-text document derived from the transcript and, when provided, the completed PAALSS report.
-Do not repeat the full PAALSS report verbatim.
-Synthesize the findings into practical next-step goals and activities.
-Keep the tone professional, concise, and clinically useful.
-If the learner name is not provided, write 'the learner'.
-If English-Spanish examples are appropriate, include them.
-If a recommendation is not supported by the evidence, do not include it.
+When the user asks for the recommendations document, write a second plain-text document that resembles a clinician-facing intervention/recommendation handout, like the sample provided by the user.
+This is not another PAALSS report.
+Do not repeat the PAALSS section structure.
+Do not output analysis notes, caveats, or meta commentary unless something is truly unavailable.
+Use the transcript and, when available, the completed PAALSS report as your evidence base.
+
+Purpose and style:
+- The document should read like a practical follow-up recommendations note written after the language sample analysis.
+- Tone should be professional, concise, clinical, and readable.
+- Prefer short paragraphs and goal statements over long explanations.
+- Keep the recommendations tightly connected to the observed data.
+- Do not invent unsupported strengths, deficits, diagnoses, classifications, or therapy history.
+
+Title:
+- Use this title format:
+  Recommendations for <learner name>
+- If the learner name is not provided, use:
+  Recommendations for the learner
+- Only add a descriptor after a colon if that descriptor is explicitly provided in the user materials or clearly established in the completed report.
+- Do not invent labels such as communicator type unless they are actually supported by the provided materials.
 
 Use this exact structure and section numbering:
 
 Recommendations for <learner name or the learner>
 
 1) Summary of Quantitative Results
-Write 1 short paragraph summarizing the most relevant quantitative findings from the available analysis, such as:
-- total intelligible utterances when available
+Write one cohesive paragraph, similar in tone and density to the sample document.
+This paragraph should briefly synthesize the key quantitative and structural findings from the transcript or completed PAALSS report, for example:
+- number of intelligible utterances, if available
 - TNW
 - TNDW
-- salient lexical profile
-- observed morphological profile
+- salient lexical distribution
+- notable noun or verb profile
+- observed morphology
 - grammatical complexity score
-- key syntactic patterns
-Only include values that are actually supported by the transcript or provided report.
+- most relevant syntactic patterns
+This section should sound like a polished summary, not like a data dump.
+Only include values actually supported by the transcript or report.
 
 2) Language Objectives
-Provide targeted next-step objectives grouped under these exact subheadings:
+Under this section, use these exact subheadings:
 Vocabulary Recommendation:
 Morphology Recommendation:
 Grammatical Complexity Recommendations:
 Syntactic Recommendations:
 
-Under each subheading, write concise goal statements that are specific, clinically useful, and grounded in the observed findings.
-Targets should emphasize likely next steps rather than unsupported advanced forms.
-When useful, include short English/Spanish examples.
+Under each subheading, write 1 to 3 concise treatment-style objective statements.
+These should look like intervention targets, similar to the sample, for example:
+- <learner> will increase usage of high-frequency verbs in English and Spanish, e.g., querer/want, tener/have
+- <learner> will use an article + noun sentence structure in English and Spanish, e.g., la niña/the girl
+
+Rules for objectives:
+- Base each objective on observed needs, gaps, or next-step growth areas.
+- Keep the wording specific and teachable.
+- Prefer foundational next steps over ambitious unsupported targets.
+- When useful, include brief bilingual examples in the same line.
+- Avoid turning this into a long explanatory paragraph.
 
 3) Suggested Activities
-Provide 3 to 5 practical activity ideas aligned with the language objectives.
-Activities should be concrete and easy for a clinician or communication partner to run.
-You may include brief resource suggestions when helpful, but do not depend on web lookup and do not fabricate precise URLs unless they are explicitly provided in the user materials.
+Write 2 to 4 concise activity paragraphs aligned with the language objectives.
+Each activity should describe:
+- the activity or interaction context
+- what the clinician or communication partner can prompt the learner to do
+- how the activity supports the stated language objectives
+
+Activity style guidance:
+- The activities should resemble the sample document: practical, concrete, and easy to run.
+- Activities may include story retell, book reading, play, puzzle, picture description, routines, or AAC-supported conversation tasks if they fit the findings.
+- If suggesting a resource, keep it brief and clinically useful.
+- Do not fabricate URLs.
+- Only include a specific URL if it was explicitly provided in the user materials.
 
 Additional rules for the recommendations document:
-- Make the document standalone and readable on its own.
-- Base recommendations on observed strengths and gaps.
-- Avoid diagnosing or making claims beyond the evidence.
-- Prefer actionable, teachable targets.
-- Keep the document concise but substantive.
+- Make the document standalone and polished.
+- Base recommendations on observed strengths and growth areas from the provided materials.
+- Avoid diagnosis, prognosis, or claims beyond the evidence.
+- Do not include raw enunciado-by-enunciado analysis here.
+- Do not include markdown tables, bullets with symbols, or report-style section nesting beyond the structure above.
+- If the completed PAALSS report is available, use it to guide prioritization.
+- If the completed PAALSS report is not available, derive recommendations conservatively from the transcript alone.
 """)
 
 
 def build_recommendation_user_prompt(transcript_text: str, report_text: str) -> str:
     return dedent(
         f"""\
-        Using the transcript and the completed PAALSS report below, write only the separate recommendations document.
+        Write only the recommendations document.
         Do not output the PAALSS report again.
-        Follow the recommendations-document structure defined in the system prompt exactly.
+        Match the recommendations-document structure and style defined in the system prompt.
+        Use the completed PAALSS report to drive the quantitative summary and to prioritize the language objectives.
+        The result should read like a clinician-facing recommendations note, not like another analysis report.
 
         TRANSCRIPT (numbered enunciados):
         {transcript_text}
